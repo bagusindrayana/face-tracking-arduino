@@ -1,0 +1,16 @@
+{
+    "name": "node-ex-website",
+    "version": "1.0.0",
+    "description": "",
+    "scripts": {
+        "start": "nodemon server.js"
+    },
+    "dependencies": {
+        "express": "^4.17.2",
+        "express-http-to-https": "^1.1.4",
+        "face-api.js": "^0.20.0",
+        "nodemon": "^2.0.15",
+        "serialport": "^9.2.8",
+        "socket.io": "^4.4.0"
+    }
+}

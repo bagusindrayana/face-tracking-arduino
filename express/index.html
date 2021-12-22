@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+    <script src="./js/face-api.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            margin: 0;
+            height: 0;
+            width: 100%;
+            height: 100%;
+           
+        }
+
+        #result {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #inputVideo {
+            width: 640px;
+            height: 480px;
+            display: block;
+        }
+
+        canvas {
+            display: block;
+            position: absolute;
+        }
+    </style>
+</head>
+<body>
+    
+
+    <table cellpadding="0" cellspacing="0" width="0" border="0">
+        <tbody>
+            <tr>
+                <td id="result">
+                    <video onplay="onPlay(this)" id="inputVideo" autoplay muted></video>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="4">
+                    <select name="" id="select-port">
+
+                    </select>
+                </td>
+               
+            </tr>
+            <tr>
+                <td colspan="4">
+                    <button onclick="run()">Start</button>
+                </td>
+               
+            </tr>
+        </tbody>
+    </table>
+
+    <script type="text/javascript">
+        var socket = io();
+        socket.on('list-ports', (ports) => {
+            var opt = "";
+            ports.forEach(port => {
+                opt += "<option value="+port+">" + port + "</option>";
+            });
+            document.getElementById("select-port").innerHTML = opt;
+        });
+
+        document.getElementById("select-port").onchange = function() {
+            socket.emit('connect-port', this.value);
+        };
+
+    
+            
+        async function run() {
+            socket.emit('connect-port', document.getElementById("select-port").value);
+            // load the models
+            await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
+            await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
+            await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
+            // await faceapi.nets.faceExpressionNet.loadFromUri('./models');
+            
+            const videoEl = document.getElementById('inputVideo')
+            navigator.getUserMedia(
+                { video: {} },
+                stream => videoEl.srcObject = stream,
+                err => console.error(err)
+            );
+
+        }
+
+        async function onPlay() {
+            const videoEl = document.getElementById('inputVideo')
+            const canvas = faceapi.createCanvasFromMedia(videoEl);
+            document.getElementById("result").append(canvas);
+            //change size camera input and range center
+            var range = 60;
+            var wt = 640;
+            var ht = 480;
+            const displaySize = { width: wt, height: ht };
+            faceapi.matchDimensions(canvas, displaySize);
+            setInterval(async()=>{
+                const detections = await faceapi.detectAllFaces(
+                    videoEl,
+                    new faceapi.TinyFaceDetectorOptions()
+                ).withFaceLandmarks().withFaceDescriptors();
+                //console.log(detections);
+                var ctx = canvas.getContext("2d");
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                if(detections.length > 0){
+                    const face = detections[0].detection._box;
+                    
+                    var xx = Math.floor(face.x+face.width/2);
+                    var yy = Math.floor(face.y+face.height/2);
+                    var dir = [0,0,0,0];
+
+                    if(xx > Math.floor(wt/2)+range){
+                        //down
+                        dir[0] = 0;
+                        dir[1] = 1;
+                    } else if(xx < Math.floor(wt/2)-range){
+                        //up
+                        dir[0] = 1;
+                        dir[1] = 0;
+                    } else {
+                        dir[0] = 0;
+                        dir[1] = 0;
+                    }
+
+                    if(yy > Math.floor(ht/2)+range){
+                        //right
+                        dir[2] = 1;
+                        dir[3] = 0;
+                    } else if(yy < Math.floor(ht/2)-range){
+                        //left
+                        dir[2] = 0;
+                        dir[3] = 1;
+                    } else {
+                        dir[2] = 0;
+                        dir[3] = 0;
+                    }
+                    //send to server
+                    socket.emit('move', dir);
+                }
+                
+                //center rect
+                ctx.beginPath();
+                ctx.lineWidth = "1";
+                ctx.strokeStyle = "green";
+                ctx.rect(wt/2-(range/2),ht/2-(range/2), range,range);
+                ctx.stroke();
+
+                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                faceapi.draw.drawDetections(canvas, resizedDetections);
+            }, 200);
+            
+            
+        }
+        
+    </script>
+</body>
+</html>
